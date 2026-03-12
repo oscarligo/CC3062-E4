@@ -13,29 +13,39 @@ type Team struct {
 	Name string `json:"name"`
 }
 
+type Countries struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Capital    string `json:"capital"`
+	Population int    `json:"population"`
+	Continent  string `json:"continent"`
+	Currency   string `json:"currency"`
+}
+
 type Message struct {
 	Message string `json:"message"`
 }
 
 var teams []Team
+var countries []Countries
 
 func main() {
-	loadTeams()
+	loadCountries()
 
 	http.HandleFunc("/api/ping", pingHandler)
-	http.HandleFunc("/api/teams", teamsHandler)
+	http.HandleFunc("/api/countries", countriesHandler)
 
 	log.Println("POST JSON API running on :80")
 	log.Fatal(http.ListenAndServe(":80", nil))
 }
 
-func loadTeams() {
-	file, err := os.ReadFile("./data/teams.json")
+func loadCountries() {
+	file, err := os.ReadFile("./data/countries.json")
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
 
-	err = json.Unmarshal(file, &teams)
+	err = json.Unmarshal(file, &countries)
 	if err != nil {
 		log.Fatal("Error parsing JSON:", err)
 	}
@@ -49,27 +59,28 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func teamsHandler(w http.ResponseWriter, r *http.Request) {
+func countriesHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 
 	case http.MethodGet:
-		handleGetTeams(w, r)
+		handleGetCountries(w, r)
 
 	case http.MethodPost:
-		handleCreateTeam(w, r)
+		handleCreateCountry(w, r)
 
 	default:
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func handleGetTeams(w http.ResponseWriter, r *http.Request) {
+func handleGetCountries(w http.ResponseWriter, r *http.Request) {
+
 	query := r.URL.Query()
 	idParam := query.Get("id")
 
 	if idParam == "" {
-		writeJSON(w, http.StatusOK, teams)
+		writeJSON(w, http.StatusOK, countries)
 		return
 	}
 
@@ -79,63 +90,64 @@ func handleGetTeams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, team := range teams {
-		if team.ID == id {
-			writeJSON(w, http.StatusOK, team)
+	for _, country := range countries {
+		if country.ID == id {
+			writeJSON(w, http.StatusOK, country)
 			return
 		}
 	}
 
-	http.Error(w, "Team not found", http.StatusNotFound)
+	http.Error(w, "Country not found", http.StatusNotFound)
 }
 
-func handleCreateTeam(w http.ResponseWriter, r *http.Request) {
+func handleCreateCountry(w http.ResponseWriter, r *http.Request) {
 
-	var newTeam Team
+	var newCountry Countries
 
-	err := json.NewDecoder(r.Body).Decode(&newTeam)
+	err := json.NewDecoder(r.Body).Decode(&newCountry)
+
 	if err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
-	if newTeam.Name == "" {
-		http.Error(w, "Name is required", http.StatusBadRequest)
+	if newCountry.Name == "" || newCountry.Capital == "" || newCountry.Population <= 0 || newCountry.Continent == "" || newCountry.Currency == "" {
+		http.Error(w, "All fields are required and population must be greater than 0", http.StatusBadRequest)
 		return
 	}
 
-	newTeam.ID = generateNextID()
+	newCountry.ID = generateNextID()
 
-	teams = append(teams, newTeam)
-	// saveTeams()
+	countries = append(countries, newCountry)
+	saveCountries()
 
-	writeJSON(w, http.StatusCreated, newTeam)
+	writeJSON(w, http.StatusCreated, newCountry)
 }
 
 func generateNextID() int {
 	maxID := 0
 
-	for _, team := range teams {
-		if team.ID > maxID {
-			maxID = team.ID
+	for _, country := range countries {
+		if country.ID > maxID {
+			maxID = country.ID
 		}
 	}
 
 	return maxID + 1
 }
 
-// func saveTeams() {
-// 	data, err := json.MarshalIndent(teams, "", "  ")
-// 	if err != nil {
-// 		log.Println("Error marshaling JSON:", err)
-// 		return
-// 	}
+func saveCountries() {
+	data, err := json.MarshalIndent(countries, "", "  ")
+	if err != nil {
+		log.Println("Error marshaling JSON:", err)
+		return
+	}
 
-// 	err = os.WriteFile("./data/teams.json", data, 0644)
-// 	if err != nil {
-// 		log.Println("Error writing file:", err)
-// 	}
-// }
+	err = os.WriteFile("./data/countries.json", data, 0644)
+	if err != nil {
+		log.Println("Error writing file:", err)
+	}
+}
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")

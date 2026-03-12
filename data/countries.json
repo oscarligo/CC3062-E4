@@ -1,0 +1,82 @@
+[
+    {
+        "id": 1,
+        "name": "Guatemala",
+        "capital": "Guatemala City",
+        "population": 18000000,
+        "continent": "America",
+        "currency": "Quetzal"
+    },
+    {
+        "id": 2,
+        "name": "Japan",
+        "capital": "Tokyo",
+        "population": 125800000,
+        "continent": "Asia",
+        "currency": "Yen"
+    },
+    {
+        "id": 3,
+        "name": "France",
+        "capital": "Paris",
+        "population": 67000000,
+        "continent": "Europe",
+        "currency": "Euro"
+    },
+    {
+        "id": 4,
+        "name": "Egypt",
+        "capital": "Cairo",
+        "population": 109000000,
+        "continent": "Africa",
+        "currency": "Egyptian Pound"
+    },
+    {
+        "id": 5,
+        "name": "Australia",
+        "capital": "Canberra",
+        "population": 25700000,
+        "continent": "Oceania",
+        "currency": "Australian Dollar"
+    },
+    {
+        "id": 6,
+        "name": "Canada",
+        "capital": "Ottawa",
+        "population": 38200000,
+        "continent": "America",
+        "currency": "Canadian Dollar"
+    },
+    {
+        "id": 7,
+        "name": "Brazil",
+        "capital": "Brasilia",
+        "population": 214000000,
+        "continent": "America",
+        "currency": "Real"
+    },
+    {
+        "id": 8,
+        "name": "Germany",
+        "capital": "Berlin",
+        "population": 83200000,
+        "continent": "Europe",
+        "currency": "Euro"
+    },
+    {
+        "id": 9,
+        "name": "India",
+        "capital": "New Delhi",
+        "population": 1408000000,
+        "continent": "Asia",
+        "currency": "Indian Rupee"
+    },
+    {
+        "id": 10,
+        "name": "South Africa",
+        "capital": "Pretoria",
+        "population": 59300000,
+        "continent": "Africa",
+        "currency": "Rand"
+    }
+]
