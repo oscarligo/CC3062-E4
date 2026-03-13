@@ -1,5 +1,7 @@
 # Sistemas y Tecnologías Web - Ejercicio 4
 
+API para servir inforamción sobre países. 
+
 ## Levantar el proyecto
 
 ```bash
