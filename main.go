@@ -1,11 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
+
+	_ "modernc.org/sqlite"
 )
 
 type Team struct {
@@ -26,29 +29,45 @@ type Message struct {
 	Message string `json:"message"`
 }
 
-var teams []Team
-var countries []Countries
+var db *sql.DB
 
 func main() {
-	loadCountries()
+	initDB()
+	defer db.Close()
 
 	http.HandleFunc("/api/ping", pingHandler)
 	http.HandleFunc("/api/countries", countriesHandler)
 
-	log.Println("POST JSON API running on :80")
+	log.Println("JSON API running on :80")
 	log.Fatal(http.ListenAndServe(":80", nil))
 }
 
-func loadCountries() {
-	file, err := os.ReadFile("./data/countries.json")
+func initDB() {
+	var err error
+	db, err = sql.Open("sqlite", "./data/countries.db")
 	if err != nil {
-		log.Fatal("Error reading file:", err)
+		log.Fatal("Error opening database:", err)
 	}
 
-	err = json.Unmarshal(file, &countries)
+	err = db.Ping()
 	if err != nil {
-		log.Fatal("Error parsing JSON:", err)
+		log.Fatal("Error connecting to database:", err)
 	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS country (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			capital TEXT NOT NULL,
+			population INTEGER NOT NULL,
+			continent TEXT NOT NULL,
+			currency TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		log.Fatal("Error creating table:", err)
+	}
+
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
@@ -69,8 +88,11 @@ func countriesHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handleCreateCountry(w, r)
 
+	case http.MethodDelete:
+		handelDeleteCountry(w, r)
+
 	default:
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		writeJSON(w, http.StatusMethodNotAllowed, Message{Message: "Method not allowed"})
 	}
 }
 
@@ -80,24 +102,55 @@ func handleGetCountries(w http.ResponseWriter, r *http.Request) {
 	idParam := query.Get("id")
 
 	if idParam == "" {
+		rows, err := db.Query("SELECT id, name, capital, population, continent, currency FROM country ORDER BY id")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, Message{Message: "Database query failed"})
+			return
+		}
+		defer rows.Close()
+
+		countries := make([]Countries, 0)
+		for rows.Next() {
+			var country Countries
+			err = rows.Scan(&country.ID, &country.Name, &country.Capital, &country.Population, &country.Continent, &country.Currency)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, Message{Message: "Error reading database rows"})
+				return
+			}
+			countries = append(countries, country)
+		}
+
+		if err = rows.Err(); err != nil {
+			writeJSON(w, http.StatusInternalServerError, Message{Message: "Database iteration failed"})
+			return
+		}
+
 		writeJSON(w, http.StatusOK, countries)
 		return
 	}
 
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		http.Error(w, "Invalid id parameter", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, Message{Message: "Invalid id parameter"})
 		return
 	}
 
-	for _, country := range countries {
-		if country.ID == id {
-			writeJSON(w, http.StatusOK, country)
+	var country Countries
+	err = db.QueryRow(
+		"SELECT id, name, capital, population, continent, currency FROM country WHERE id = ?",
+		id,
+	).Scan(&country.ID, &country.Name, &country.Capital, &country.Population, &country.Continent, &country.Currency)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, Message{Message: "Country not found"})
 			return
 		}
+
+		writeJSON(w, http.StatusInternalServerError, Message{Message: "Database query failed"})
+		return
 	}
 
-	http.Error(w, "Country not found", http.StatusNotFound)
+	writeJSON(w, http.StatusOK, country)
 }
 
 func handleCreateCountry(w http.ResponseWriter, r *http.Request) {
@@ -107,46 +160,70 @@ func handleCreateCountry(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&newCountry)
 
 	if err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, Message{Message: "Invalid JSON body"})
 		return
 	}
 
 	if newCountry.Name == "" || newCountry.Capital == "" || newCountry.Population <= 0 || newCountry.Continent == "" || newCountry.Currency == "" {
-		http.Error(w, "All fields are required and population must be greater than 0", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, Message{Message: "All fields are required and population must be greater than 0"})
 		return
 	}
 
-	newCountry.ID = generateNextID()
+	result, err := db.Exec(
+		"INSERT INTO country (name, capital, population, continent, currency) VALUES (?, ?, ?, ?, ?)",
+		newCountry.Name,
+		newCountry.Capital,
+		newCountry.Population,
+		newCountry.Continent,
+		newCountry.Currency,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, Message{Message: "Database insert failed"})
+		return
+	}
 
-	countries = append(countries, newCountry)
-	saveCountries()
+	id, err := result.LastInsertId()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, Message{Message: "Could not read inserted id"})
+		return
+	}
+
+	newCountry.ID = int(id)
 
 	writeJSON(w, http.StatusCreated, newCountry)
 }
 
-func generateNextID() int {
-	maxID := 0
-
-	for _, country := range countries {
-		if country.ID > maxID {
-			maxID = country.ID
-		}
-	}
-
-	return maxID + 1
-}
-
-func saveCountries() {
-	data, err := json.MarshalIndent(countries, "", "  ")
-	if err != nil {
-		log.Println("Error marshaling JSON:", err)
+func handelDeleteCountry(w http.ResponseWriter, r *http.Request) {
+	idParam := r.URL.Query().Get("id")
+	if idParam == "" {
+		writeJSON(w, http.StatusBadRequest, Message{Message: "ID parameter is required"})
 		return
 	}
 
-	err = os.WriteFile("./data/countries.json", data, 0644)
+	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		log.Println("Error writing file:", err)
+		writeJSON(w, http.StatusBadRequest, Message{Message: "Invalid ID parameter"})
+		return
 	}
+
+	result, err := db.Exec("DELETE FROM country WHERE id = ?", id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, Message{Message: "Database delete failed"})
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, Message{Message: "Could not read affected rows"})
+		return
+	}
+
+	if rowsAffected == 0 {
+		writeJSON(w, http.StatusNotFound, Message{Message: "Country not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, Message{Message: "Country deleted successfully"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {

@@ -78,5 +78,13 @@
         "population": 59300000,
         "continent": "Africa",
         "currency": "Rand"
+    },
+    {
+        "id": 11,
+        "name": "Italy",
+        "capital": "Rome",
+        "population": 59110000,
+        "continent": "Europe",
+        "currency": "Euro"
     }
 ]
